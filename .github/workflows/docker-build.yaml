@@ -585,7 +585,7 @@ jobs:
         if: github.ref == 'refs/heads/main'  # sadece main branch için
         run: |
           echo "Triggering HuggingFace Space rebuild..."
-          curl -X POST https://api-inference.huggingface.co/spaces/ynsbyrm/Open-Webui/rebuild \
+          curl -X POST https://huggingface.co/api/spaces/ynsbyrm/Open-Webui/restart \
                -H "Authorization: Bearer ${{ secrets.HF_API_TOKEN }}"
 
   merge-cuda-images:
