@@ -1,22 +1,41 @@
 <script lang="ts">
-	import { onMount, onDestroy } from 'svelte';
+	import { onMount, onDestroy, tick } from 'svelte';
 	import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.mjs?url';
 	import panzoom, { type PanZoom } from 'panzoom';
+	import { clampDocumentTargetPage } from '$lib/utils/documentPreview';
 	import Spinner from './Spinner.svelte';
 
 	export let url: string | null = null;
 	export let data: ArrayBuffer | Uint8Array | null = null;
 	export let className = 'w-full h-[70vh]';
+	export let targetPage: number | null = null;
+
+	type PdfDocument = import('pdfjs-dist').PDFDocumentProxy;
+	type PdfTextLayer = InstanceType<typeof import('pdfjs-dist').TextLayer>;
 
 	let outerContainer: HTMLDivElement;
 	let sceneElement: HTMLDivElement;
 	let loading = true;
 	let error = '';
-	let pdfDoc: any = null;
+	let pdfDoc: PdfDocument | null = null;
 	let pzInstance: PanZoom | null = null;
 	let zoomLevel = 1;
 	let rerenderTimer: ReturnType<typeof setTimeout> | null = null;
 	let lastRenderedZoom = 1;
+
+	// Keep a reference to TextLayer instances so we can update/cancel them
+	let textLayerInstances: PdfTextLayer[] = [];
+
+	const cancelTextLayers = () => {
+		for (const tl of textLayerInstances) {
+			try {
+				tl.cancel();
+			} catch {
+				// Text layers can already be resolved or canceled during rerenders.
+			}
+		}
+		textLayerInstances = [];
+	};
 
 	const initPanzoom = () => {
 		if (pzInstance) {
@@ -34,7 +53,7 @@
 					}
 					return false;
 				},
-				beforeMouseDown: (e) => {
+				beforeMouseDown: () => {
 					// Only allow drag-to-pan when zoomed in (not at default scale)
 					const transform = pzInstance?.getTransform();
 					if (transform && Math.abs(transform.scale - 1) < 0.01) {
@@ -81,28 +100,63 @@
 		}
 	};
 
+	const scrollToTargetPage = async () => {
+		if (!outerContainer || !sceneElement || !pdfDoc) return;
+		const page = clampDocumentTargetPage(targetPage, pdfDoc.numPages);
+		if (!page) return;
+
+		await tick();
+		const pageWrapper = sceneElement.querySelectorAll('.pdf-page-wrapper')[page - 1] as
+			| HTMLElement
+			| undefined;
+		pageWrapper?.scrollIntoView({ block: 'start' });
+	};
+
 	// Re-render existing canvases at a new zoom level (preserves panzoom transform)
 	const rerenderPages = async (forZoom: number) => {
 		if (!pdfDoc || !sceneElement) return;
+		const pdfjs = await import('pdfjs-dist');
 		const dpr = window.devicePixelRatio || 1;
 		const containerWidth = outerContainer?.clientWidth || 800;
 
-		const canvases = sceneElement.querySelectorAll('canvas');
+		const pageWrappers = sceneElement.querySelectorAll('.pdf-page-wrapper');
 
-		for (let i = 0; i < canvases.length; i++) {
+		cancelTextLayers();
+
+		for (let i = 0; i < pageWrappers.length; i++) {
 			const page = await pdfDoc.getPage(i + 1);
 			const viewport = page.getViewport({ scale: 1 });
 			const cssScale = containerWidth / viewport.width;
 			const renderScale = cssScale * forZoom * dpr;
 			const scaledViewport = page.getViewport({ scale: renderScale });
+			const cssViewport = page.getViewport({ scale: cssScale });
 
-			const canvas = canvases[i];
+			const wrapper = pageWrappers[i] as HTMLElement;
+			// Update the CSS custom property so textLayer dimensions resolve correctly
+			wrapper.style.setProperty('--scale-factor', String(cssViewport.scale));
+
+			const canvas = wrapper.querySelector('canvas')!;
 			canvas.width = scaledViewport.width;
 			canvas.height = scaledViewport.height;
 
 			const ctx = canvas.getContext('2d');
 			if (ctx) {
-				await page.render({ canvasContext: ctx, viewport: scaledViewport }).promise;
+				await page.render({ canvas, canvasContext: ctx, viewport: scaledViewport }).promise;
+			}
+
+			// Rebuild text layer
+			const textLayerDiv = wrapper.querySelector('.textLayer') as HTMLElement;
+			if (textLayerDiv) {
+				textLayerDiv.innerHTML = '';
+
+				const textContent = await page.getTextContent();
+				const textLayer = new pdfjs.TextLayer({
+					textContentSource: textContent,
+					container: textLayerDiv,
+					viewport: cssViewport
+				});
+				await textLayer.render();
+				textLayerInstances.push(textLayer);
 			}
 		}
 		lastRenderedZoom = forZoom;
@@ -111,9 +165,12 @@
 	const renderAllPages = async () => {
 		if (!pdfDoc || !sceneElement) return;
 
-		// Clear previous canvases
+		// Clear previous content
 		sceneElement.innerHTML = '';
 
+		cancelTextLayers();
+
+		const pdfjs = await import('pdfjs-dist');
 		const dpr = window.devicePixelRatio || 1;
 
 		for (let i = 1; i <= pdfDoc.numPages; i++) {
@@ -125,7 +182,24 @@
 			const cssScale = containerWidth / viewport.width;
 			const renderScale = cssScale * dpr;
 			const scaledViewport = page.getViewport({ scale: renderScale });
+			const cssViewport = page.getViewport({ scale: cssScale });
 
+			// Create page wrapper (positioned container for canvas + text layer)
+			const wrapper = document.createElement('div');
+			wrapper.className = 'pdf-page-wrapper';
+			wrapper.style.position = 'relative';
+			wrapper.style.width = `${Math.round(cssScale * viewport.width)}px`;
+			wrapper.style.height = `${Math.round(cssScale * viewport.height)}px`;
+			wrapper.style.display = 'block';
+			// pdfjs TextLayer uses --total-scale-factor (= --scale-factor * --user-unit)
+			// to position/size text spans. We must set --scale-factor so the calc resolves.
+			wrapper.style.setProperty('--scale-factor', String(cssViewport.scale));
+
+			if (i > 1) {
+				wrapper.style.marginTop = '4px';
+			}
+
+			// Create canvas
 			const canvas = document.createElement('canvas');
 			canvas.width = scaledViewport.width;
 			canvas.height = scaledViewport.height;
@@ -133,22 +207,37 @@
 			canvas.style.width = `${Math.round(cssScale * viewport.width)}px`;
 			canvas.style.height = `${Math.round(cssScale * viewport.height)}px`;
 			canvas.style.display = 'block';
-
-			if (i > 1) {
-				canvas.style.marginTop = '4px';
-			}
-
-			sceneElement.appendChild(canvas);
+			wrapper.appendChild(canvas);
 
 			const ctx = canvas.getContext('2d');
+			if (!ctx) continue;
+
 			await page.render({
+				canvas,
 				canvasContext: ctx,
 				viewport: scaledViewport
 			}).promise;
+
+			// Create text layer overlay — pdfjs setLayerDimensions handles its sizing
+			const textLayerDiv = document.createElement('div');
+			textLayerDiv.className = 'textLayer';
+			wrapper.appendChild(textLayerDiv);
+
+			const textContent = await page.getTextContent();
+			const textLayer = new pdfjs.TextLayer({
+				textContentSource: textContent,
+				container: textLayerDiv,
+				viewport: cssViewport
+			});
+			await textLayer.render();
+			textLayerInstances.push(textLayer);
+
+			sceneElement.appendChild(wrapper);
 		}
 
 		lastRenderedZoom = 1;
 		initPanzoom();
+		await scrollToTargetPage();
 	};
 
 	const loadPdf = async () => {
@@ -184,9 +273,14 @@
 		loadPdf();
 	});
 
+	$: if (!loading && pdfDoc && targetPage) {
+		void scrollToTargetPage();
+	}
+
 	onDestroy(() => {
 		if (rerenderTimer) clearTimeout(rerenderTimer);
 		pzInstance?.dispose();
+		cancelTextLayers();
 		if (pdfDoc) {
 			pdfDoc.destroy();
 			pdfDoc = null;
@@ -214,7 +308,8 @@
 			class="absolute bottom-3 left-1/2 -translate-x-1/2 z-10 flex items-center gap-0.5 rounded-lg bg-white/90 dark:bg-gray-850/90 backdrop-blur-sm shadow-lg border border-gray-200/60 dark:border-gray-700/60 px-1 py-0.5"
 		>
 			<button
-				class="p-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 transition text-gray-500 dark:text-gray-400"
+				type="button"
+				class="shrink-0 min-w-7 h-7 inline-flex items-center justify-center p-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 transition text-gray-500 dark:text-gray-400"
 				on:click={zoomOut}
 				aria-label="Zoom out"
 			>
@@ -232,14 +327,16 @@
 				</svg>
 			</button>
 			<button
-				class="px-1.5 py-1 min-w-[3rem] text-center text-[11px] font-medium text-gray-500 dark:text-gray-400 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 transition tabular-nums"
+				type="button"
+				class="shrink-0 min-w-12 h-7 px-1.5 py-1 text-center text-[0.6875rem] font-normal text-gray-500 dark:text-gray-400 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 transition tabular-nums"
 				on:click={resetView}
 				aria-label="Reset zoom"
 			>
 				{Math.round(zoomLevel * 100)}%
 			</button>
 			<button
-				class="p-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 transition text-gray-500 dark:text-gray-400"
+				type="button"
+				class="shrink-0 min-w-7 h-7 inline-flex items-center justify-center p-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 transition text-gray-500 dark:text-gray-400"
 				on:click={zoomIn}
 				aria-label="Zoom in"
 			>
@@ -257,3 +354,98 @@
 		</div>
 	{/if}
 </div>
+
+<style>
+	/*
+	 * Minimal textLayer styles extracted from pdfjs-dist/web/pdf_viewer.css.
+	 * These ensure the invisible text spans are positioned exactly over the
+	 * rendered canvas so that browser-native Ctrl+F search and text selection
+	 * work correctly.
+	 */
+	:global(.textLayer) {
+		position: absolute;
+		text-align: initial;
+		inset: 0;
+		overflow: clip;
+		opacity: 1;
+		line-height: 1;
+		-webkit-text-size-adjust: none;
+		-moz-text-size-adjust: none;
+		text-size-adjust: none;
+		forced-color-adjust: none;
+		transform-origin: 0 0;
+		caret-color: CanvasText;
+		z-index: 0;
+	}
+
+	:global(.textLayer :is(span, br)) {
+		color: transparent;
+		position: absolute;
+		white-space: pre;
+		cursor: text;
+		transform-origin: 0% 0%;
+	}
+
+	:global(.textLayer) {
+		/* --total-scale-factor is derived from --scale-factor (set on the wrapper)
+		   and --user-unit (defaults to 1). This mirrors the official pdf_viewer.css. */
+		--user-unit: 1;
+		--total-scale-factor: calc(var(--scale-factor) * var(--user-unit));
+		--min-font-size: 1;
+		--text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size));
+		--min-font-size-inv: calc(1 / var(--min-font-size));
+	}
+
+	:global(.textLayer > :not(.markedContent)),
+	:global(.textLayer .markedContent span:not(.markedContent)) {
+		z-index: 1;
+		--font-height: 0;
+		font-size: calc(var(--text-scale-factor) * var(--font-height));
+		--scale-x: 1;
+		--rotate: 0deg;
+		transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv));
+	}
+
+	:global(.textLayer .markedContent) {
+		display: contents;
+	}
+
+	:global(.textLayer span[role='img']) {
+		-webkit-user-select: none;
+		-moz-user-select: none;
+		user-select: none;
+		cursor: default;
+	}
+
+	/* Selection highlight color */
+	:global(.textLayer ::-moz-selection) {
+		background: rgba(0, 0, 255, 0.25);
+	}
+
+	:global(.textLayer ::selection) {
+		background: rgba(0, 0, 255, 0.25);
+	}
+
+	:global(.textLayer br::-moz-selection) {
+		background: transparent;
+	}
+
+	:global(.textLayer br::selection) {
+		background: transparent;
+	}
+
+	:global(.textLayer .endOfContent) {
+		display: block;
+		position: absolute;
+		inset: 100% 0 0;
+		z-index: 0;
+		cursor: default;
+		-webkit-user-select: none;
+		-moz-user-select: none;
+		user-select: none;
+	}
+
+	:global(.textLayer.selecting .endOfContent) {
+		top: 0;
+	}
+</style>
