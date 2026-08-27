@@ -10,6 +10,8 @@
 
 	import { toast } from 'svelte-sonner';
 
+	import { toast } from 'svelte-sonner';
+
 	import Knobs from '$lib/components/icons/Knobs.svelte';
 	import Dropdown from '$lib/components/common/Dropdown.svelte';
 	import DropdownMenu from '$lib/components/common/DropdownMenu.svelte';

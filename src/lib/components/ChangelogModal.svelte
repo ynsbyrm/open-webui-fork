@@ -45,6 +45,13 @@
 		show = false;
 	};
 
+	const closeModal = async () => {
+		localStorage.version = $config.version;
+		await settings.set({ ...$settings, ...{ version: $config.version } });
+		await updateUserSettings(localStorage.token, { ui: $settings });
+		show = false;
+	};
+
 	$: if (show) {
 		init();
 	}

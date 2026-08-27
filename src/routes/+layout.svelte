@@ -1061,6 +1061,108 @@
 		}
 	};
 
+	const desktopEventHandler = async (event) => {
+		// Events that don't require auth
+		if (event.type === 'page:reload') {
+			location.reload();
+			return;
+		}
+		if (event.type === 'page:navigate' && event.data?.path) {
+			await goto(event.data.path);
+			return;
+		}
+		if (event.type === 'query' && (event.data?.query || event.data?.files?.length)) {
+			desktopEvent.set(event);
+			await goto('/');
+			return;
+		}
+		if (event.type === 'call') {
+			desktopEvent.set(event);
+			await goto('/');
+			return;
+		}
+		if (event.type === 'theme:update' && event.data?.theme) {
+			const newTheme = event.data.theme;
+			localStorage.setItem('theme', newTheme);
+			theme.set(newTheme);
+
+			// Apply theme classes (mirrors logic from chat/Settings/General.svelte)
+			const themes = ['dark', 'light', 'oled-dark'];
+			let themeToApply =
+				newTheme === 'oled-dark' ? 'dark' : newTheme === 'her' ? 'light' : newTheme;
+			if (newTheme === 'system') {
+				themeToApply = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+			}
+			themes
+				.filter((e) => e !== themeToApply)
+				.forEach((e) => {
+					e.split(' ').forEach((cls) => document.documentElement.classList.remove(cls));
+				});
+			themeToApply.split(' ').forEach((cls) => document.documentElement.classList.add(cls));
+			return;
+		}
+		if (event.type === 'models:refresh') {
+			const token = localStorage.token;
+			if (token) {
+				models.set(
+					await getModels(
+						token,
+						$config?.features?.enable_direct_connections
+							? ($settings?.directConnections ?? null)
+							: null
+					)
+				);
+			}
+			return;
+		}
+
+		const token = localStorage.token;
+		if (!token) return;
+
+		// Only admins can modify system-level connections
+		if ($user?.role !== 'admin') return;
+
+		try {
+			if (event.type === 'connections:terminal') {
+				if (event.data.action === 'add') {
+					await addTerminalConnection(token, {
+						url: event.data.url,
+						key: event.data.key,
+						name: 'Local Open Terminal'
+					});
+				} else if (event.data.action === 'remove') {
+					await removeTerminalConnection(token, event.data.url);
+				}
+			} else if (event.type === 'connections:openai') {
+				if (event.data.action === 'add') {
+					await addOpenAIConnection(token, {
+						url: event.data.url,
+						key: event.data.key
+					});
+				} else if (event.data.action === 'remove') {
+					await removeOpenAIConnection(token, event.data.url);
+				}
+			}
+		} catch (e) {
+			console.error('Desktop connection update failed:', e);
+		}
+	};
+
+	const windowMessageEventHandler = async (event) => {
+		if (
+			!['https://openwebui.com', 'https://www.openwebui.com', 'http://localhost:9999'].includes(
+				event.origin
+			)
+		) {
+			return;
+		}
+
+		if (event.data === 'export:stats' || event.data?.type === 'export:stats') {
+			syncStatsEventData = event.data;
+			showSyncStatsModal = true;
+		}
+	};
+
 	onMount(async () => {
 		const originalFetch = window.fetch.bind(window);
 		window.fetch = async (input, init) => {

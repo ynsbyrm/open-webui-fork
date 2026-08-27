@@ -17,6 +17,9 @@
 		user
 	} from '$lib/stores';
 
+	import { uploadFile } from '$lib/apis/files';
+	import { toast } from 'svelte-sonner';
+
 	import Controls from './Controls/Controls.svelte';
 	import CallOverlay from './MessageInput/CallOverlay.svelte';
 	import Drawer from '../common/Drawer.svelte';

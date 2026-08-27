@@ -178,6 +178,11 @@
 				($_user?.permissions?.chat?.temporary ?? true) &&
 				!($_user?.permissions?.chat?.temporary_enforced ?? false)));
 
+	$: isActive =
+		(taskIds && taskIds.length > 0) ||
+		(history.currentId && history.messages[history.currentId]?.done != true) ||
+		generating;
+
 	export let prompt = '';
 	export let files: any[] = [];
 
@@ -206,6 +211,19 @@
 	export let onQueueEdit: (id: string) => void = () => {};
 	export let onQueueDelete: (id: string) => void = () => {};
 	export let onUpdate: (data?: { file?: any }) => void = () => {};
+	export let chatTasks = [];
+
+	let inputContent = null;
+
+	export let pendingOAuthTools = [];
+
+	let showTerminalMenu = false;
+
+	export let messageQueue: { id: string; prompt: string; files: any[] }[] = [];
+	export let onQueueSendNow: (id: string) => void = () => {};
+	export let onQueueEdit: (id: string) => void = () => {};
+	export let onQueueDelete: (id: string) => void = () => {};
+
 	export let chatTasks = [];
 
 	let inputContent = null;
@@ -2006,6 +2024,23 @@
 										: ''}"
 									id="chat-input-container"
 								>
+									{#if prompt.split('\n').length > 2}
+										<div class="fixed top-0 right-0 z-20">
+											<div class="mt-2.5 mr-3">
+												<button
+													type="button"
+													class="p-1 rounded-lg hover:bg-gray-100/50 dark:hover:bg-gray-800/50"
+													aria-label="Expand input"
+													on:click={async () => {
+														showInputModal = true;
+													}}
+												>
+													<Expand />
+												</button>
+											</div>
+										</div>
+									{/if}
+
 									{#if suggestions}
 										{#key $settings?.richTextInput ?? true}
 											{#key $settings?.showFormattingToolbar ?? false}

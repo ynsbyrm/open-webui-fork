@@ -158,6 +158,10 @@ class ModelAccessResponse(ModelUserResponse):
     write_access: bool | None = False
 
 
+class ModelAccessResponse(ModelUserResponse):
+    write_access: Optional[bool] = False
+
+
 class ModelResponse(ModelModel):
     pass
 

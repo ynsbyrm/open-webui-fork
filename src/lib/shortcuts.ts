@@ -252,6 +252,16 @@ export const shortcuts: ShortcutRegistry = {
 		category: 'Chat',
 		configurable: true
 	},
+	[Shortcut.OPEN_MODEL_SELECTOR]: {
+		name: 'Open Model Selector',
+		keys: ['mod', 'shift', 'M'],
+		category: 'Chat'
+	},
+	[Shortcut.TOGGLE_DICTATION]: {
+		name: 'Toggle Dictation',
+		keys: ['mod', 'shift', 'L'],
+		category: 'Chat'
+	},
 
 	//Global
 	[Shortcut.SEARCH]: {

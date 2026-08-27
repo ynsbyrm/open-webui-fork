@@ -80,6 +80,20 @@ class PromptAccessListResponse(BaseModel):
     total: int
 
 
+class PromptAccessResponse(PromptUserResponse):
+    write_access: Optional[bool] = False
+
+
+class PromptListResponse(BaseModel):
+    items: list[PromptUserResponse]
+    total: int
+
+
+class PromptAccessListResponse(BaseModel):
+    items: list[PromptAccessResponse]
+    total: int
+
+
 class PromptForm(BaseModel):
     command: str
     name: str  # Changed from title

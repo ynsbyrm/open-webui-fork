@@ -194,6 +194,54 @@ class PptxLoader:
         ]
 
 
+class ExcelLoader:
+    """Fallback Excel loader using pandas when unstructured is not installed."""
+
+    def __init__(self, file_path):
+        self.file_path = file_path
+
+    def load(self) -> list[Document]:
+        import pandas as pd
+
+        text_parts = []
+        xls = pd.ExcelFile(self.file_path)
+        for sheet_name in xls.sheet_names:
+            df = pd.read_excel(xls, sheet_name=sheet_name)
+            text_parts.append(f'Sheet: {sheet_name}\n{df.to_string(index=False)}')
+        return [
+            Document(
+                page_content='\n\n'.join(text_parts),
+                metadata={'source': self.file_path},
+            )
+        ]
+
+
+class PptxLoader:
+    """Fallback PowerPoint loader using python-pptx when unstructured is not installed."""
+
+    def __init__(self, file_path):
+        self.file_path = file_path
+
+    def load(self) -> list[Document]:
+        from pptx import Presentation
+
+        prs = Presentation(self.file_path)
+        text_parts = []
+        for i, slide in enumerate(prs.slides, 1):
+            slide_texts = []
+            for shape in slide.shapes:
+                if shape.has_text_frame:
+                    slide_texts.append(shape.text_frame.text)
+            if slide_texts:
+                text_parts.append(f'Slide {i}:\n' + '\n'.join(slide_texts))
+        return [
+            Document(
+                page_content='\n\n'.join(text_parts),
+                metadata={'source': self.file_path},
+            )
+        ]
+
+
 class TikaLoader:
     def __init__(self, url, file_path, mime_type=None, extract_images=None, server_version='3'):
         self.url = url

@@ -51,6 +51,8 @@
 
 	import { WEBUI_API_BASE_URL } from '$lib/constants';
 
+	import { WEBUI_API_BASE_URL } from '$lib/constants';
+
 	import {
 		convertMessagesToHistory,
 		copyToClipboard,
@@ -1190,6 +1192,25 @@
 		}
 	};
 
+	const updateLastReadAt = (id) => {
+		$socket?.emit('events:chat', {
+			chat_id: id,
+			data: { type: 'last_read_at' }
+		});
+	};
+
+	const terminalEventHandler = (type: string, data: any) => {
+		if (type === 'terminal:display_file') {
+			if (!data?.path) return;
+			displayFileHandler(data.path, { showControls, showFileNavPath });
+		} else if (type === 'terminal:write_file' || type === 'terminal:replace_file_content') {
+			if (!data?.path) return;
+			showFileNavDir.set(data.path);
+		} else if (type === 'terminal:run_command') {
+			showFileNavDir.set('/');
+		}
+	};
+
 	const chatEventHandler = async (event, cb) => {
 		console.log(event);
 
@@ -1551,6 +1572,13 @@
 			if (p.url.pathname === '/' || p.url.pathname.startsWith('/folders/')) {
 				await tick();
 				initNewChat();
+
+				// Re-fetch banners on navigation to homepage so newly configured banners appear
+				try {
+					banners.set(await getBanners(localStorage.token).catch(() => []));
+				} catch (e) {
+					console.error('Failed to refresh banners:', e);
+				}
 			}
 
 			stopAudio();
@@ -2319,6 +2347,9 @@
 				chatTasks = chat?.tasks ?? [];
 				serverContextUsage = chat?.context_usage ?? null;
 
+				// Load tasks from chat-level DB field
+				chatTasks = chat?.tasks ?? [];
+
 				autoScroll = true;
 				await tick();
 
@@ -2373,6 +2404,17 @@
 					) {
 						currentMessage.done = true;
 					}
+				}
+
+				// If no active tasks and current message is incomplete, generation was interrupted
+				const currentMessage = history.currentId ? history.messages[history.currentId] : null;
+				if (
+					currentMessage &&
+					currentMessage.role === 'assistant' &&
+					!currentMessage.done &&
+					(!taskIds || taskIds.length === 0)
+				) {
+					currentMessage.done = true;
 				}
 
 				await tick();

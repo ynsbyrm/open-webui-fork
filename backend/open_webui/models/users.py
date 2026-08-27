@@ -132,6 +132,12 @@ class UserModel(BaseModel):
     def normalize_variables(cls, value):
         return value if isinstance(value, dict) else {}
 
+    @model_validator(mode='after')
+    def set_profile_image_url(self):
+        if not self.profile_image_url:
+            self.profile_image_url = f'/api/v1/users/{self.id}/profile/image'
+        return self
+
 
 class UserStatusModel(UserModel):
     is_active: bool = False
@@ -176,6 +182,11 @@ class UpdateProfileForm(BaseModel):
     bio: str | None = None
     gender: str | None = None
     date_of_birth: datetime.date | None = None
+
+    @field_validator('profile_image_url')
+    @classmethod
+    def check_profile_image_url(cls, v: str) -> str:
+        return validate_profile_image_url(v)
 
     @field_validator('profile_image_url')
     @classmethod
@@ -268,6 +279,13 @@ class UserUpdateForm(BaseModel):
     @field_validator('profile_image_url', mode='before')
     @classmethod
     def check_profile_image_url(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        return validate_profile_image_url(v)
+
+    @field_validator('profile_image_url', mode='before')
+    @classmethod
+    def check_profile_image_url(cls, v: Optional[str]) -> Optional[str]:
         if v is None:
             return v
         return validate_profile_image_url(v)

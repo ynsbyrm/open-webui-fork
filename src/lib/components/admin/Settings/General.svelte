@@ -70,10 +70,18 @@
 		return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
 	};
 
+	const updateBanners = async () => {
+		_banners.set(await setBanners(localStorage.token, banners));
+	};
+
 	const updateHandler = async () => {
 		adminConfig.DEFAULT_INTERFACE_SETTINGS = defaultInterfaceSettings;
 
 		const res = await updateAdminConfig(localStorage.token, adminConfig);
+
+		await updateBanners();
+
+		await config.set(await getBackendConfig());
 
 		await updateBanners();
 

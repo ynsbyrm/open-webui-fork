@@ -5,6 +5,8 @@ from typing import Optional
 
 log = logging.getLogger(__name__)
 
+log = logging.getLogger(__name__)
+
 import anyio
 import httpx
 from mcp import ClientSession

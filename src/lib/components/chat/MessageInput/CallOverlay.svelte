@@ -395,6 +395,19 @@
 		return $config?.audio?.tts?.voice;
 	};
 
+	// Get voice: model-specific > user settings > config default
+	const getVoiceId = () => {
+		// Check for model-specific TTS voice first
+		if (model?.info?.meta?.tts?.voice) {
+			return model.info.meta.tts.voice;
+		}
+		// Fall back to user settings or config default
+		if ($settings?.audio?.tts?.defaultVoice === $config.audio.tts.voice) {
+			return $settings?.audio?.tts?.voice ?? $config?.audio?.tts?.voice;
+		}
+		return $config?.audio?.tts?.voice;
+	};
+
 	const speakSpeechSynthesisHandler = (content) => {
 		if ($showCallOverlay) {
 			return new Promise((resolve) => {

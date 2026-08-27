@@ -153,8 +153,8 @@
 					onSelect={(e) => {
 						const { type, data } = e;
 
-						if (type === 'knowledge') {
-							insertTextHandler('');
+					if (type === 'knowledge') {
+						insertTextHandler('');
 
 							onUpload({
 								type: 'file',
@@ -178,8 +178,20 @@
 					onSelect={(e) => {
 						const { type, data } = e;
 
-						if (type === 'model') {
-							insertTextHandler('');
+						onSelect({
+							type: 'model',
+							data: data
+						});
+					}
+				}}
+			/>
+		{:else if char === '$'}
+			<Skills
+				bind:this={suggestionElement}
+				{query}
+				bind:filteredItems
+				onSelect={(e) => {
+					const { type, data } = e;
 
 							onSelect({
 								type: 'model',

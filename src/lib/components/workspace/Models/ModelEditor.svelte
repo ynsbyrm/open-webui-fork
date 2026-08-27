@@ -698,8 +698,6 @@
 											required
 										/>
 									</div>
-								</div>
-							</div>
 
 							{#if preset}
 								<div>

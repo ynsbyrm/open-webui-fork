@@ -246,6 +246,10 @@ class AccessGrantsPermissions(BaseModel):
     allow_groups: bool = True
 
 
+class AccessGrantsPermissions(BaseModel):
+    allow_users: bool = True
+
+
 class ChatPermissions(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 

@@ -1474,6 +1474,9 @@ async def add_file_to_knowledge_by_id(
             directory_id=form_data.directory_id,
             db=db,
         )
+
+        # Add file to knowledge base
+        await Knowledges.add_file_to_knowledge_by_id(knowledge_id=id, file_id=form_data.file_id, user_id=user.id, db=db)
     except Exception as e:
         log.debug(e)
         raise HTTPException(

@@ -932,6 +932,81 @@ async def update_model_access_by_id(
 
 
 ############################
+# UpdateModelAccessById
+############################
+
+
+class ModelAccessGrantsForm(BaseModel):
+    id: str
+    name: Optional[str] = None
+    access_grants: list[dict]
+
+
+@router.post('/model/access/update', response_model=Optional[ModelModel])
+async def update_model_access_by_id(
+    request: Request,
+    form_data: ModelAccessGrantsForm,
+    user=Depends(get_verified_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    model = await Models.get_model_by_id(form_data.id, db=db)
+
+    # Non-preset models (e.g. direct Ollama/OpenAI models) may not have a DB
+    # entry yet. Create a minimal one so access grants can be stored.
+    if not model:
+        if user.role != 'admin':
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=ERROR_MESSAGES.ACCESS_PROHIBITED,
+            )
+        model = await Models.insert_new_model(
+            ModelForm(
+                id=form_data.id,
+                name=form_data.name or form_data.id,
+                meta=ModelMeta(),
+                params=ModelParams(),
+            ),
+            user.id,
+            db=db,
+        )
+        if not model:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=ERROR_MESSAGES.DEFAULT('Error creating model entry'),
+            )
+
+    if (
+        model.user_id != user.id
+        and not await AccessGrants.has_access(
+            user_id=user.id,
+            resource_type='model',
+            resource_id=model.id,
+            permission='write',
+            db=db,
+        )
+        and user.role != 'admin'
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=ERROR_MESSAGES.ACCESS_PROHIBITED,
+        )
+
+    form_data.access_grants = await filter_allowed_access_grants(
+        request.app.state.config.USER_PERMISSIONS,
+        user.id,
+        user.role,
+        form_data.access_grants,
+        'sharing.public_models',
+    )
+
+    await AccessGrants.set_access_grants('model', form_data.id, form_data.access_grants, db=db)
+
+    await Models.update_model_updated_at_by_id(form_data.id, db=db)
+
+    return await Models.get_model_by_id(form_data.id, db=db)
+
+
+############################
 # DeleteModelById
 ############################
 

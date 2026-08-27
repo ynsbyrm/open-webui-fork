@@ -5740,6 +5740,37 @@ async def streaming_chat_response_handler(response, ctx):
                             except Exception as e:
                                 log.exception(f'Error extracting citation source: {e}')
 
+                        await terminal_event_handler(
+                            tool_function_name,
+                            tool_function_params,
+                            tool_result,
+                            event_emitter,
+                        )
+
+                        # Extract citation sources from tool results
+                        if (
+                            citations_enabled
+                            and tool_function_name
+                            in [
+                                'search_web',
+                                'fetch_url',
+                                'view_file',
+                                'view_knowledge_file',
+                                'query_knowledge_files',
+                            ]
+                            and tool_result
+                        ):
+                            try:
+                                citation_sources = get_citation_source_from_tool_result(
+                                    tool_name=tool_function_name,
+                                    tool_params=tool_function_params,
+                                    tool_result=tool_result,
+                                    tool_id=tool.get('tool_id', '') if tool else '',
+                                )
+                                tool_call_sources.extend(citation_sources)
+                            except Exception as e:
+                                log.exception(f'Error extracting citation source: {e}')
+
                         results.append(
                             {
                                 'tool_call_id': tool_call_id,
@@ -6020,7 +6051,7 @@ async def streaming_chat_response_handler(response, ctx):
                                         BLOCKED_MODULES = {CODE_INTERPRETER_BLOCKED_MODULES}
     
                                         _real_import = builtins.__import__
-                                        def restricted_import(name, globals=None, locals=None, fromlist=(), level=0):
+                                        async def restricted_import(name, globals=None, locals=None, fromlist=(), level=0):
                                             if name.split('.')[0] in BLOCKED_MODULES:
                                                 importer_name = globals.get('__name__') if globals else None
                                                 if importer_name == '__main__':
@@ -6191,6 +6222,18 @@ async def streaming_chat_response_handler(response, ctx):
                             'output': current_output,
                             **({'usage': usage} if usage else {}),
                         },
+                    )
+                elif usage:
+                    await Chats.upsert_message_to_chat_by_id_and_message_id(
+                        metadata['chat_id'],
+                        metadata['message_id'],
+                        {'done': True, 'usage': usage},
+                    )
+                else:
+                    await Chats.upsert_message_to_chat_by_id_and_message_id(
+                        metadata['chat_id'],
+                        metadata['message_id'],
+                        {'done': True},
                     )
 
                 await clear_response_stream(request.app.state.redis, response_stream_task_id)

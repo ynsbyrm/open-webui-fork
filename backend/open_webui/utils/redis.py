@@ -25,6 +25,7 @@ from open_webui.env import (
     REDIS_SOCKET_KEEPALIVE,
     REDIS_SOCKET_TIMEOUT,
     REDIS_URL,
+    REDIS_RECONNECT_DELAY,
 )
 
 log = logging.getLogger(__name__)

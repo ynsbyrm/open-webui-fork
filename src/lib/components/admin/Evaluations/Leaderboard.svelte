@@ -252,6 +252,16 @@
 			</table>
 		{/if}
 	</div>
+	<Tooltip content={$i18n.t('Re-rank models by topic similarity')}>
+		<div class="flex flex-1">
+			<Search className="size-3 ml-1 mr-3 self-center" />
+			<input
+				class="w-full text-sm pr-4 py-1 rounded-r-xl outline-hidden bg-transparent"
+				bind:value={query}
+				placeholder={$i18n.t('Search')}
+			/>
+		</div>
+	</Tooltip>
 </div>
 
 <div class="text-gray-500 text-xs mt-1.5 w-full flex justify-end">

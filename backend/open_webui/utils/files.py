@@ -50,6 +50,8 @@ _IMAGE_MIME_FALLBACK = {
     '.avif': 'image/avif',
 }
 
+from open_webui.env import AIOHTTP_CLIENT_SESSION_SSL, ENABLE_IMAGE_CONTENT_TYPE_EXTENSION_FALLBACK
+from open_webui.utils.session_pool import get_session
 
 async def get_image_base64_from_url(url: str, user=None) -> Optional[str]:
     try:

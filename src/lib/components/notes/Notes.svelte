@@ -280,6 +280,106 @@
 		}
 	};
 
+	const reset = () => {
+		page = 1;
+		items = null;
+		total = null;
+		allItemsLoaded = false;
+		itemsLoading = false;
+		notes = {};
+	};
+
+	const loadMoreItems = async () => {
+		if (allItemsLoaded) return;
+		page += 1;
+		await getItemsPage();
+	};
+
+	const init = async () => {
+		reset();
+		await getItemsPage();
+	};
+
+	$: if (query !== undefined) {
+		clearTimeout(searchDebounceTimer);
+		searchDebounceTimer = setTimeout(() => {
+			if (loaded) {
+				init();
+			}
+		}, 300);
+	}
+
+	$: if (loaded && sortKey !== undefined && permission !== undefined && viewOption !== undefined) {
+		init();
+	}
+
+	const getItemsPage = async () => {
+		itemsLoading = true;
+
+		if (viewOption === 'created') {
+			permission = null;
+		}
+
+		const res = await searchNotes(
+			localStorage.token,
+			query,
+			viewOption,
+			permission,
+			sortKey,
+			page
+		).catch(() => {
+			return [];
+		});
+
+		if (res) {
+			console.log(res);
+			total = res.total;
+			const pageItems = res.items;
+
+			if ((pageItems ?? []).length === 0) {
+				allItemsLoaded = true;
+			} else {
+				allItemsLoaded = false;
+			}
+
+			if (items) {
+				const existingIds = new Set(items.map((item) => item.id));
+				const newItems = pageItems.filter((item) => !existingIds.has(item.id));
+				items = [...items, ...newItems];
+			} else {
+				items = pageItems;
+			}
+		}
+
+		itemsLoading = false;
+		return res;
+	};
+
+	const groupNotes = (res) => {
+		if (!Array.isArray(res)) {
+			return []; // Return empty array for invalid input
+		}
+
+		// Build the grouped object while tracking order
+		const grouped: Record<string, any[]> = {};
+		const orderedKeys: string[] = [];
+
+		for (const note of res) {
+			const timeRange = getTimeRange(note.updated_at / 1000000000);
+			if (!grouped[timeRange]) {
+				grouped[timeRange] = [];
+				orderedKeys.push(timeRange);
+			}
+			grouped[timeRange].push({
+				...note,
+				timeRange
+			});
+		}
+
+		// Return as array of [timeRange, notes] to preserve insertion order
+		return orderedKeys.map((key) => [key, grouped[key]] as [string, any[]]);
+	};
+
 	let dragged = false;
 
 	const onDragOver = (e) => {
@@ -346,7 +446,7 @@
 
 <FilesOverlay show={dragged} />
 
-<div id="notes-container" class="w-full min-h-full h-full">
+<div id="notes-container" class="w-full min-h-full h-full px-3 md:px-[18px]">
 	{#if loaded}
 		<input
 			id="notes-import-input"

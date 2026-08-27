@@ -41,6 +41,25 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 from sqlalchemy.sql import case, exists
 from sqlalchemy.sql.expression import bindparam
+from open_webui.internal.db import Base, JSONField, get_async_db_context
+from open_webui.models.tags import TagModel, Tag, Tags
+from open_webui.models.folders import Folders
+from open_webui.models.chat_messages import ChatMessage, ChatMessages
+from open_webui.models.automations import AutomationRun
+from open_webui.utils.misc import sanitize_data_for_db, sanitize_text_for_db
+
+from pydantic import BaseModel, ConfigDict
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    Column,
+    ForeignKey,
+    String,
+    Text,
+    JSON,
+    Index,
+    UniqueConstraint,
+)
 
 log = logging.getLogger(__name__)
 ACTIVE_CHAT_GAP_SECONDS = 30 * 60
@@ -243,6 +262,41 @@ class ChatFileModel(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+    tasks: Optional[list] = None
+    summary: Optional[str] = None
+
+    last_read_at: Optional[int] = None
+
+
+class ChatFile(Base):
+    __tablename__ = 'chat_file'
+
+    id = Column(Text, unique=True, primary_key=True)
+    user_id = Column(Text, nullable=False)
+
+    chat_id = Column(Text, ForeignKey('chat.id', ondelete='CASCADE'), nullable=False)
+    message_id = Column(Text, nullable=True)
+    file_id = Column(Text, ForeignKey('file.id', ondelete='CASCADE'), nullable=False)
+
+    created_at = Column(BigInteger, nullable=False)
+    updated_at = Column(BigInteger, nullable=False)
+
+    __table_args__ = (UniqueConstraint('chat_id', 'file_id', name='uq_chat_file_chat_file'),)
+
+
+class ChatFileModel(BaseModel):
+    id: str
+    user_id: str
+
+    chat_id: str
+    message_id: Optional[str] = None
+    file_id: str
+
+    created_at: int
+    updated_at: int
+
+    model_config = ConfigDict(from_attributes=True)
+
 
 ####################
 # Forms
@@ -299,6 +353,9 @@ class ChatResponse(BaseModel):
     @classmethod
     def normalize_variables(cls, value):
         return value if isinstance(value, dict) else {}
+
+    tasks: Optional[list] = None
+    summary: Optional[str] = None
 
 
 class ChatTitleIdResponse(BaseModel):

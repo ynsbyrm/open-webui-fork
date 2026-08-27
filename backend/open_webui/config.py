@@ -1194,6 +1194,11 @@ WEB_FETCH_MAX_CONTENT_LENGTH = (
 
 WEB_LOADER_ENGINE = os.getenv('WEB_LOADER_ENGINE', '')
 
+WEB_FETCH_MAX_CONTENT_LENGTH = PersistentConfig(
+    'WEB_FETCH_MAX_CONTENT_LENGTH',
+    'rag.web.fetch.max_content_length',
+    (int(os.environ.get('WEB_FETCH_MAX_CONTENT_LENGTH')) if os.environ.get('WEB_FETCH_MAX_CONTENT_LENGTH') else None),
+)
 
 WEB_LOADER_CONCURRENT_REQUESTS = int(os.getenv('WEB_LOADER_CONCURRENT_REQUESTS', '10'))
 

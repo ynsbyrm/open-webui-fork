@@ -78,6 +78,8 @@
 
 	export let dragged = false;
 
+	export let dragged = false;
+
 	let models = [];
 	let selectedModelIdx = 0;
 

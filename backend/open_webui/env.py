@@ -457,6 +457,11 @@ UVICORN_WS_PER_MESSAGE_DEFLATE = os.getenv('UVICORN_WS_PER_MESSAGE_DEFLATE', 'Tr
 
 ENABLE_WEBSOCKET_SUPPORT = os.getenv('ENABLE_WEBSOCKET_SUPPORT', 'True').lower() == 'true'
 
+# Optional env vars for creating an admin account on startup
+# Useful for headless/automated deployments
+WEBUI_ADMIN_EMAIL = os.environ.get('WEBUI_ADMIN_EMAIL', '')
+WEBUI_ADMIN_PASSWORD = os.environ.get('WEBUI_ADMIN_PASSWORD', '')
+WEBUI_ADMIN_NAME = os.environ.get('WEBUI_ADMIN_NAME', 'Admin')
 
 WEBSOCKET_MANAGER = os.getenv('WEBSOCKET_MANAGER', '')
 

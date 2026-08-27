@@ -1187,6 +1187,9 @@ class OAuthClientManager:
             # get_client registers client_info too
             client_info = await self.get_client_info(client_id)
         if client_info is None:
+            # ensure_client_from_config registers client_info too
+            client_info = self.get_client_info(client_id)
+        if client_info is None:
             raise HTTPException(404)
 
         redirect_uri = client_info.redirect_uris[0] if client_info.redirect_uris else None

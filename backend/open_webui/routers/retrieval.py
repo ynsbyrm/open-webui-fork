@@ -19,6 +19,7 @@ from fastapi import (
     APIRouter,
     Depends,
     FastAPI,
+    Query,
     File,
     Form,
     HTTPException,
@@ -1117,6 +1118,16 @@ async def update_rag_config(request: Request, form_data: ConfigForm, user=Depend
     )
     config.PADDLEOCR_VL_TOKEN = (
         form_data.PADDLEOCR_VL_TOKEN if form_data.PADDLEOCR_VL_TOKEN is not None else config.PADDLEOCR_VL_TOKEN
+    )
+    request.app.state.config.PADDLEOCR_VL_BASE_URL = (
+        form_data.PADDLEOCR_VL_BASE_URL
+        if form_data.PADDLEOCR_VL_BASE_URL is not None
+        else request.app.state.config.PADDLEOCR_VL_BASE_URL
+    )
+    request.app.state.config.PADDLEOCR_VL_TOKEN = (
+        form_data.PADDLEOCR_VL_TOKEN
+        if form_data.PADDLEOCR_VL_TOKEN is not None
+        else request.app.state.config.PADDLEOCR_VL_TOKEN
     )
 
     # MinerU settings
@@ -2961,6 +2972,22 @@ async def process_web_search(request: Request, form_data: SearchForm, user=Depen
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
             detail=ERROR_MESSAGES.DEFAULT(e, ERROR_MESSAGES.WEB_SEARCH_ERROR),
+        )
+
+
+async def _validate_collection_access(collection_names: list[str], user, access_type: str = 'read') -> None:
+    """
+    Raise 403 if the user lacks access to any of the requested collections.
+    Delegates to the shared filter_accessible_collections utility so the
+    access rules stay in one place.
+    """
+    requested = set(collection_names)
+    allowed = await filter_accessible_collections(requested, user, access_type=access_type)
+    denied = requested - allowed
+    if denied:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=ERROR_MESSAGES.ACCESS_PROHIBITED,
         )
 
 

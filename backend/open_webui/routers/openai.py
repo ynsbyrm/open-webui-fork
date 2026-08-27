@@ -1859,6 +1859,14 @@ async def responses(
     payload = form_data.model_dump(exclude_none=True)
     is_streaming_request = bool(payload.get('stream', False))
 
+    # Parse JSON body to resolve model-based routing
+    payload = None
+    if body:
+        try:
+            payload = json.loads(body)
+        except (json.JSONDecodeError, ValueError):
+            payload = None
+
     idx = 0
     model_id = form_data.model
 

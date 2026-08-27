@@ -90,6 +90,13 @@
 	type DirectoryFileEntry = { path: string; filename: string; file: File };
 	type DirectoryManifestEntry = DirectoryFileEntry & { checksum: string; size: number };
 
+	let showAddWebpageModal = false;
+	let showAddTextContentModal = false;
+
+	let showSyncConfirmModal = false;
+	let showAccessControlModal = false;
+
+	let minSize = 0;
 	type Knowledge = {
 		id: string;
 		name: string;
@@ -1140,6 +1147,13 @@
 	}}
 	on:cancel={() => {
 		pendingSyncFiles = null;
+	}}
+/>
+
+<AttachWebpageModal
+	bind:show={showAddWebpageModal}
+	onSubmit={async (e) => {
+		uploadWeb(e.data);
 	}}
 />
 

@@ -62,6 +62,17 @@ def _clean_proxy_headers(raw_headers) -> dict:
     """Return a copy of *raw_headers* with stale encoding headers removed."""
     return {k: v for k, v in raw_headers.items() if k not in _STRIP_PROXY_HEADERS}
 
+# Headers that become stale after aiohttp auto-decompresses the upstream
+# response body.  Forwarding them verbatim causes desktop / programmatic
+# clients to attempt decompression of an already-decoded payload, resulting
+# in ZlibError.  See https://github.com/aio-libs/aiohttp/issues/4462.
+_STRIP_PROXY_HEADERS = frozenset({'Content-Encoding', 'Content-Length', 'Transfer-Encoding'})
+
+
+def _clean_proxy_headers(raw_headers) -> dict:
+    """Return a copy of *raw_headers* with stale encoding headers removed."""
+    return {k: v for k, v in raw_headers.items() if k not in _STRIP_PROXY_HEADERS}
+
 
 async def send_get_request(
     url: str,
@@ -857,6 +868,7 @@ async def show_model_info(
         payload=JSONCodec.dumps(payload),
         key=key,
         user=user,
+        stream=True,
     )
 
 
@@ -1298,6 +1310,7 @@ async def generate_openai_embeddings(
         payload=JSONCodec.dumps(payload),
         key=get_api_key(url_idx, url, (await Config.get('ollama.api_configs', {}))),
         user=user,
+        stream=payload.get('stream', False),
         metadata=metadata,
         api_config=api_config,
         request=request,
@@ -1370,6 +1383,7 @@ async def generate_anthropic_messages(
     form_data: dict,
     url_idx: int | None = None,
     user=Depends(get_verified_user),
+    db: AsyncSession = Depends(get_async_session),
 ):
     """
     Proxy for Ollama's Anthropic-compatible /v1/messages endpoint.

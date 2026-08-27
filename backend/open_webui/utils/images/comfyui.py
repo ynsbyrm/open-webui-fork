@@ -9,6 +9,9 @@ from open_webui.utils.json_codec import JSONCodec
 from open_webui.utils.session_pool import get_session
 from pydantic import BaseModel
 
+from open_webui.env import AIOHTTP_CLIENT_SESSION_SSL
+from open_webui.utils.session_pool import get_session
+
 log = logging.getLogger(__name__)
 
 default_headers = {'User-Agent': 'Mozilla/5.0'}

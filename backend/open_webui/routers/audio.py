@@ -32,6 +32,7 @@ from open_webui.config import (
     WHISPER_COMPUTE_TYPE,
     WHISPER_LANGUAGE,
     WHISPER_MODEL_AUTO_UPDATE,
+    WHISPER_COMPUTE_TYPE,
     WHISPER_MODEL_DIR,
     WHISPER_MULTILINGUAL,
     WHISPER_VAD_FILTER,
@@ -400,6 +401,77 @@ async def _tts_openai(request, payload, file_path, file_body_path, user):
     except Exception as exc:
         log.exception(exc)
         await _raise_tts_error(exc, r)
+
+    elif request.app.state.config.TTS_ENGINE == 'mistral':
+        api_key = request.app.state.config.TTS_MISTRAL_API_KEY
+        api_base_url = request.app.state.config.TTS_MISTRAL_API_BASE_URL or 'https://api.mistral.ai/v1'
+
+        if not api_key:
+            raise HTTPException(
+                status_code=400,
+                detail='Mistral API key is required for Mistral TTS',
+            )
+
+        try:
+            timeout = aiohttp.ClientTimeout(total=AIOHTTP_CLIENT_TIMEOUT)
+            async with aiohttp.ClientSession(timeout=timeout, trust_env=True) as session:
+                mistral_payload = {
+                    'input': payload.get('input', ''),
+                    'model': request.app.state.config.TTS_MODEL or 'voxtral-mini-tts-2603',
+                    'voice_id': payload.get('voice', ''),
+                    'response_format': 'mp3',
+                }
+
+                r = await session.post(
+                    url=f'{api_base_url}/audio/speech',
+                    json=mistral_payload,
+                    headers={
+                        'Content-Type': 'application/json',
+                        'Authorization': f'Bearer {api_key}',
+                    },
+                    ssl=AIOHTTP_CLIENT_SESSION_SSL,
+                )
+
+                r.raise_for_status()
+
+                res = await r.json()
+                audio_data = res.get('audio_data', '')
+                if not audio_data:
+                    raise ValueError('No audio_data in Mistral TTS response')
+
+                audio_bytes = base64.b64decode(audio_data)
+
+                async with aiofiles.open(file_path, 'wb') as f:
+                    await f.write(audio_bytes)
+
+                async with aiofiles.open(file_body_path, 'w') as f:
+                    await f.write(json.dumps(payload))
+
+            return FileResponse(file_path)
+
+        except Exception as e:
+            log.exception(e)
+            detail = None
+
+            status_code = 500
+            detail = 'Open WebUI: Server Connection Error'
+
+            if r is not None:
+                status_code = r.status
+
+                try:
+                    res = await r.json()
+                    if 'error' in res:
+                        detail = f'External: {res["error"]}'
+                    elif 'message' in res:
+                        detail = f'External: {res["message"]}'
+                except Exception:
+                    detail = f'External: {e}'
+
+            raise HTTPException(
+                status_code=status_code,
+                detail=detail,
+            )
 
 
 async def _tts_elevenlabs(request, payload, file_path, file_body_path, user):
@@ -1206,6 +1278,14 @@ async def transcription(
         )
     log.info('file.content_type: %s', file.content_type)
     stt_supported_content_types = await Config.get('audio.stt.supported_content_types', [])
+
+    if not strict_match_mime_type(stt_supported_content_types, file.content_type):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=ERROR_MESSAGES.ACCESS_PROHIBITED,
+        )
+    log.info(f'file.content_type: {file.content_type}')
+    stt_supported_content_types = getattr(request.app.state.config, 'STT_SUPPORTED_CONTENT_TYPES', [])
 
     if not strict_match_mime_type(stt_supported_content_types, file.content_type):
         raise HTTPException(

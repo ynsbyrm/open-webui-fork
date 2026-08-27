@@ -31,6 +31,7 @@ from open_webui.utils.tools import (
     get_tool_server_url,
     set_terminal_servers,
     set_tool_servers,
+    set_terminal_servers,
 )
 from pydantic import BaseModel, ConfigDict
 

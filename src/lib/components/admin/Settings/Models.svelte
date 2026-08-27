@@ -39,6 +39,7 @@
 
 	import ModelEditor from '$lib/components/workspace/Models/ModelEditor.svelte';
 	import { toast } from 'svelte-sonner';
+	import Badge from '$lib/components/common/Badge.svelte';
 	import ConfirmDialog from '$lib/components/common/ConfirmDialog.svelte';
 	import ManageModelsModal from './Models/ManageModelsModal.svelte';
 	import ModelDefaultsPanel from './Models/ModelDefaultsPanel.svelte';
@@ -145,6 +146,17 @@
 	$: defaultModelIdSet = new Set(defaultModelIds);
 	$: defaultPinnedModelIdSet = new Set(defaultPinnedModelIds);
 
+	let viewOption = ''; // '' = All, 'enabled', 'disabled', 'visible', 'hidden'
+
+	const perPage = 30;
+	let currentPage = 1;
+
+	const isPublicModel = (model) => {
+		return (model?.access_grants ?? []).some(
+			(g) => g.principal_type === 'user' && g.principal_id === '*' && g.permission === 'read'
+		);
+	};
+
 	$: if (models) {
 		const modelOrder = new Map(modelOrderList.map((id, idx) => [id, idx]));
 
@@ -177,6 +189,76 @@
 	let canReorderModels = false;
 
 	$: canReorderModels = searchValue === '' && viewOption === '' && selectedTag === '';
+
+	const enableAllHandler = async () => {
+		const modelsToEnable = filteredModels.filter((m) => !(m.is_active ?? true));
+		// Optimistic UI update
+		modelsToEnable.forEach((m) => (m.is_active = true));
+		models = models;
+		// Sync with server
+		await Promise.all(
+			modelsToEnable.map((model) => upsertModelHandler(model, { is_active: true }, false))
+		);
+
+		await tick();
+		await init();
+	};
+
+	const disableAllHandler = async () => {
+		const modelsToDisable = filteredModels.filter((m) => m.is_active ?? true);
+		// Optimistic UI update
+		modelsToDisable.forEach((m) => (m.is_active = false));
+		models = models;
+		// Sync with server
+		await Promise.all(
+			modelsToDisable.map((model) => upsertModelHandler(model, { is_active: false }, false))
+		);
+
+		await tick();
+		await init();
+	};
+
+	const showAllHandler = async () => {
+		const modelsToShow = filteredModels.filter((m) => m?.meta?.hidden === true);
+		// Optimistic UI update
+		modelsToShow.forEach((m) => {
+			m.meta = { ...m.meta, hidden: false };
+		});
+		models = models;
+		// Sync with server
+		await Promise.all(
+			modelsToShow.map((model) =>
+				upsertModelHandler(model, { meta: { ...model.meta, hidden: false } }, false)
+			)
+		);
+
+		toast.success($i18n.t('All models are now visible'));
+		await tick();
+		await init();
+	};
+
+	const hideAllHandler = async () => {
+		const modelsToHide = filteredModels.filter((m) => !(m?.meta?.hidden ?? false));
+		// Optimistic UI update
+		modelsToHide.forEach((m) => {
+			m.meta = { ...m.meta, hidden: true };
+		});
+		models = models;
+		// Sync with server
+		await Promise.all(
+			modelsToHide.map((model) =>
+				upsertModelHandler(model, { meta: { ...model.meta, hidden: true } }, false)
+			)
+		);
+
+		toast.success($i18n.t('All models are now hidden'));
+		await tick();
+		await init();
+	};
+
+	$: if (searchValue || viewOption !== undefined) {
+		currentPage = 1;
+	}
 
 	const enableAllHandler = async () => {
 		const modelsToEnable = filteredModels.filter((m) => !(m.is_active ?? true));
@@ -699,6 +781,7 @@
 					</span>
 				</h2>
 			</div>
+		</div>
 
 			{#if $user?.role === 'admin'}
 				<input

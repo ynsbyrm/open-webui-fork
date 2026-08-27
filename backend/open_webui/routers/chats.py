@@ -2080,6 +2080,85 @@ async def get_shared_chat_access_by_id(
 
 
 ############################
+# UpdateSharedChatAccessById
+############################
+
+
+class ChatAccessGrantsForm(BaseModel):
+    access_grants: list[dict]
+
+
+@router.post('/shared/{id}/access/update', response_model=Optional[ChatResponse])
+async def update_shared_chat_access_by_id(
+    request: Request,
+    id: str,
+    form_data: ChatAccessGrantsForm,
+    user=Depends(get_verified_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    chat = await Chats.get_chat_by_id_and_user_id(id, user.id, db=db)
+    if not chat:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=ERROR_MESSAGES.NOT_FOUND,
+        )
+
+    if chat.user_id != user.id and user.role != 'admin':
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=ERROR_MESSAGES.ACCESS_PROHIBITED,
+        )
+
+    form_data.access_grants = await filter_allowed_access_grants(
+        request.app.state.config.USER_PERMISSIONS,
+        user.id,
+        user.role,
+        form_data.access_grants,
+        'sharing.public_chats',
+    )
+
+    await AccessGrants.set_access_grants('shared_chat', id, form_data.access_grants, db=db)
+
+    return ChatResponse(**chat.model_dump())
+
+
+############################
+# GetSharedChatAccessById
+############################
+
+
+@router.get('/shared/{id}/access', response_model=list)
+async def get_shared_chat_access_by_id(
+    id: str,
+    user=Depends(get_verified_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    chat = await Chats.get_chat_by_id_and_user_id(id, user.id, db=db)
+    if not chat:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=ERROR_MESSAGES.NOT_FOUND,
+        )
+
+    if chat.user_id != user.id and user.role != 'admin':
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=ERROR_MESSAGES.ACCESS_PROHIBITED,
+        )
+
+    grants = await AccessGrants.get_grants_by_resource('shared_chat', id, db=db)
+    return [
+        {
+            'id': g.id,
+            'principal_type': g.principal_type,
+            'principal_id': g.principal_id,
+            'permission': g.permission,
+        }
+        for g in grants
+    ]
+
+
+############################
 # UpdateChatFolderIdById
 ############################
 

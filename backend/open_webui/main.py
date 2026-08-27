@@ -230,6 +230,7 @@ from open_webui.utils.chat_id import (
 from open_webui.utils.chat_variables import (
     normalize_chat_variables,
 )
+from open_webui.utils.actions import chat_action as chat_action_handler
 from open_webui.utils.embeddings import generate_embeddings
 from open_webui.utils.json_codec import JSONCodec
 from open_webui.utils.json_response import apply_orjson_http_json
@@ -372,6 +373,15 @@ async def lifespan(app: FastAPI):
         if await create_admin_user(WEBUI_ADMIN_EMAIL, WEBUI_ADMIN_PASSWORD, WEBUI_ADMIN_NAME):
             # Disable signup since we now have an admin
             await Config.upsert({'ui.enable_signup': False})
+
+    if SAFE_MODE:
+        await Functions.deactivate_all_functions()
+
+    # Create admin account from env vars if specified and no users exist
+    if WEBUI_ADMIN_EMAIL and WEBUI_ADMIN_PASSWORD:
+        if await create_admin_user(WEBUI_ADMIN_EMAIL, WEBUI_ADMIN_PASSWORD, WEBUI_ADMIN_NAME):
+            # Disable signup since we now have an admin
+            app.state.config.ENABLE_SIGNUP = False
 
     if SAFE_MODE:
         await Functions.deactivate_all_functions()
@@ -1240,6 +1250,23 @@ async def chat_completion(
             or 'full'
         )
 
+        # parent_id signals intent:
+        #   null   → new chat (root message, no parent)
+        #   value  → follow-up (user message's parentId = prev assistant)
+        #   absent → legacy caller, no chat management
+        is_new_chat = 'parent_id' in form_data and form_data['parent_id'] is None and not form_data.get('chat_id')
+        parent_id = form_data.pop('parent_id', None)
+        form_data.pop('new_chat', None)  # Legacy field
+
+        # Multi-model: {model_id: assistant_message_id}
+        # Single-model fallback: built from 'model' + 'id'
+        message_ids = form_data.pop('message_ids', None)
+        if not message_ids:
+            message_ids = {model_id: form_data.pop('id', None)}
+        else:
+            form_data.pop('id', None)
+
+        user_message = form_data.pop('user_message', None) or form_data.pop('parent_message', None)
         metadata = {
             'user_id': user.id,
             'user_agent': request.headers.get('user-agent', '') or '',
@@ -1862,6 +1889,9 @@ async def chat_completion(
 generate_chat_completions = chat_completion
 generate_chat_completion = chat_completion
 
+# Expose as app.state so internal callers (e.g. automations) can
+# use the full pipeline without importing from main.py (avoids circular deps).
+app.state.CHAT_COMPLETION_HANDLER = chat_completion
 
 @app.post('/api/v1/chats/{id}/messages/{message_id}/resolve')
 async def resolve_chat_message_tool_call(

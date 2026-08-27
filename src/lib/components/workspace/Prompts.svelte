@@ -614,6 +614,9 @@
 										</Tooltip>
 									{/if}
 								</div>
+								{#if !prompt.write_access}
+									<Badge type="muted" content={$i18n.t('Read Only')} />
+								{/if}
 							</div>
 
 							<div
@@ -630,6 +633,16 @@
 										)}
 									</div>
 								</Tooltip>
+
+								<div>·</div>
+
+								{#if prompt.content}
+									<Tooltip content={prompt.content} placement="top">
+										<div class="line-clamp-1">
+											{prompt.content}
+										</div>
+									</Tooltip>
+								{/if}
 							</div>
 
 							<div class="ml-2 flex shrink-0 flex-row items-center self-center">
