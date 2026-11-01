@@ -25,6 +25,10 @@
 		scrollToTab(selectedTab);
 	}
 
+	$: if (loaded && selectedTab) {
+		loadCounts();
+	}
+
 	const scrollToTab = (tabId) => {
 		const tabElement = document.getElementById(tabId);
 		if (tabElement) {
